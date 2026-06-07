@@ -1,1 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>商品圖抓取工具</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
+<style>
+:root {
+  --bg:#F6F4F0; --surface:#FFF; --surface2:#F0EDE8;
+  --border:#E0D9CF; --border2:#EAE5DC;
+  --text:#1C1916; --text2:#6B6259; --text3:#A89F97;
+  --accent:#C8622A; --accent-bg:#FDF1E8; --accent-border:#F2C8A0;
+  --green:#2E7D4F; --green-bg:#E8F5EE; --green-border:#A8D8BC;
+  --red:#C0392B; --red-bg:#FDECEA;
+  --r:10px; --rs:6px;
+  --shadow:0 2px 16px rgba(0,0,0,.07);
+  --shadow-lg:0 12px 48px rgba(0,0,0,.15);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.6;}
+
+header{background:var(--surface);border-bottom:1px solid var(--border);height:58px;padding:0 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;}
+.logo-icon{width:32px;height:32px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;}
+
+/* Steps */
+.steps{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:6px;margin-bottom:24px;gap:3px;}
+.step{flex:1;display:flex;align-items:center;gap:7px;padding:8px 10px;border-radius:7px;font-size:12px;color:var(--text3);transition:all .2s;}
+.step.active{background:var(--accent);color:#fff;}
+.step.done{background:var(--green-bg);color:var(--green);}
+.step-n{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;background:var(--border2);color:var(--text3);}
+.step.active .step-n{background:rgba(255,255,255,.3);color:#fff;}
+.step.done .step-n{background:var(--green);color:#fff;}
+
+main{max-width:1000px;margin:0 auto;padding:28px 24px 120px;}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px;margin-bottom:16px;box-shadow:var(--shadow);animation:fadeUp .3s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+.card-title{font-size:15px;font-weight:700;margin-bottom:18px;display:flex;align-items:center;gap:9px;}
+.card-n{width:26px;height:26px;background:var(--accent);color:#fff;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;}
+
+/* Drop zone */
+.drop-zone{border:2px dashed var(--border);border-radius:var(--r);padding:44px 24px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface2);}
+.drop-zone:hover,.drop-zone.over{border-color:var(--accent);background:var(--accent-bg);}
+.dz-icon{font-size:44px;margin-bottom:10px;opacity:.45;display:block;}
+.drop-zone p{color:var(--text2);}
+.drop-zone p strong{color:var(--accent);}
+.drop-zone small{color:var(--text3);font-size:12px;margin-top:5px;display:block;}
+
+.file-pill{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:var(--rs);margin-top:12px;}
+
+/* Brand result */
+.brand-result{display:flex;align-items:center;gap:14px;padding:16px 20px;background:var(--accent-bg);border:1px solid var(--accent-border);border-radius:var(--r);margin-top:12px;}
+.brand-big{font-size:28px;}
+.brand-detected{font-size:16px;font-weight:700;}
+.brand-path{font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:3px;}
+
+/* Product tags */
+.ptags{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}
+.ptag{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:100px;font-size:13px;background:var(--surface2);border:1px solid var(--border);transition:all .15s;}
+.ptag.confirmed{background:var(--green-bg);border-color:var(--green-border);color:var(--green);}
+.ptag-del{background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;line-height:1;padding:0;}
+.ptag-del:hover{color:var(--red);}
+
+/* Progress */
+.prog-bar{height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;margin:10px 0;}
+.prog-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .35s ease;width:0;}
+.log{font-family:'DM Mono',monospace;font-size:11px;color:var(--text2);background:var(--surface2);border-radius:var(--rs);padding:10px 14px;max-height:100px;overflow-y:auto;line-height:2;}
+
+/* Image grid */
+.prod-section{margin-bottom:28px;}
+.prod-hd{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:1px solid var(--border2);margin-bottom:12px;}
+.prod-title{font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px;}
+.prod-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;}
+.img-card{border:2px solid var(--border2);border-radius:var(--r);overflow:hidden;cursor:pointer;transition:all .15s;background:var(--surface);position:relative;}
+.img-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:var(--shadow);}
+.img-card.sel{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg);}
+.img-thumb{width:100%;height:95px;object-fit:contain;background:var(--surface2);display:block;padding:8px;}
+.img-body{padding:7px 10px;border-top:1px solid var(--border2);}
+.img-name{font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.img-angle{font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:2px;}
+.img-check{position:absolute;top:6px;right:6px;width:22px;height:22px;background:var(--accent);border-radius:50%;display:none;align-items:center;justify-content:center;color:white;font-size:12px;box-shadow:0 2px 6px rgba(200,98,42,.45);}
+.img-card.sel .img-check{display:flex;}
+
+/* Bottom bar */
+#bot-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);padding:14px 32px;display:none;align-items:center;justify-content:space-between;z-index:50;box-shadow:0 -4px 24px rgba(0,0,0,.08);}
+#bot-bar.on{display:flex;}
+.bot-info{font-size:13px;color:var(--text2);}
+.bot-info strong{font-size:16px;color:var(--text);}
+.bot-actions{display:flex;gap:8px;}
+
+/* Buttons */
+.btn{padding:9px 20px;border-radius:var(--rs);font-size:13px;font-family:inherit;font-weight:500;cursor:pointer;transition:all .15s;border:1px solid transparent;display:inline-flex;align-items:center;gap:7px;}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+.btn-primary:hover:not(:disabled){background:#B55525;}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed;}
+.btn-sec{background:var(--surface);color:var(--text);border-color:var(--border);}
+.btn-sec:hover{background:var(--surface2);}
+.btn-ghost{background:transparent;color:var(--text2);border-color:transparent;}
+.btn-ghost:hover{background:var(--surface2);color:var(--text);}
+.btn-sm{padding:5px 12px;font-size:12px;}
+.sel-sec{font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface);cursor:pointer;color:var(--text2);font-family:inherit;transition:all .15s;}
+.sel-sec:hover{border-color:var(--accent);color:var(--accent);}
+
+.alert{padding:11px 14px;border-radius:var(--rs);font-size:13px;line-height:1.7;margin-bottom:14px;display:flex;align-items:flex-start;gap:8px;}
+.alert-info{background:var(--accent-bg);border:1px solid var(--accent-border);color:#7D3E10;}
+.alert-warn{background:#FFF8E1;border:1px solid #FFE082;color:#7D5C00;}
+
+.inline-input{display:flex;gap:8px;margin-top:10px;}
+.inline-input input{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:var(--rs);font-family:inherit;font-size:13px;background:var(--surface);color:var(--text);}
+.inline-input input:focus{outline:none;border-color:var(--accent);}
+
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* Auth button */
+#auth-btn{display:flex;align-items:center;gap:8px;padding:7px 16px;border-radius:var(--rs);border:1px solid var(--border);background:var(--surface);cursor:pointer;font-size:13px;font-family:inherit;color:var(--text2);transition:all .15s;}
+#auth-btn:hover{background:var(--surface2);}
+#auth-btn.connected{border-color:var(--green);color:var(--green);background:var(--green-bg);}
+
+/* Download modal */
+#dl-modal{display:none;position:fixed;inset:0;background:rgba(28,25,22,.5);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+#dl-modal.on{display:flex;}
+.dl-box{background:#fff;border-radius:16px;padding:36px;width:380px;text-align:center;box-shadow:var(--shadow-lg);}
+.dl-icon{font-size:48px;margin-bottom:12px;}
+.dl-title{font-size:18px;font-weight:700;margin-bottom:6px;}
+.dl-sub{font-size:13px;color:var(--text2);margin-bottom:20px;}
+.dl-detail{font-size:11px;color:var(--text3);margin-top:8px;font-family:'DM Mono',monospace;min-height:18px;}
+
+@media(max-width:620px){
+  main{padding:16px 16px 120px;}
+  header{padding:0 16px;}
+  .steps{overflow-x:auto;}
+  .step{white-space:nowrap;}
+  .img-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr));}
+  #bot-bar{padding:12px 16px;flex-wrap:wrap;gap:8px;}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🗂️</div>
+    商品圖抓取工具
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <button id="auth-btn" onclick="handleAuth()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span id="auth-label">登入 Google 帳號</span>
+    </button>
+  </div>
+</header>
+
+<main>
+  <div class="steps">
+    <div class="step active" id="s1"><div class="step-n">1</div>登入</div>
+    <div class="step" id="s2"><div class="step-n">2</div>上傳 PPT</div>
+    <div class="step" id="s3"><div class="step-n">3</div>辨識品牌</div>
+    <div class="step" id="s4"><div class="step-n">4</div>確認商品</div>
+    <div class="step" id="s5"><div class="step-n">5</div>選圖下載</div>
+  </div>
+
+  <!-- Step 1: Login -->
+  <div class="card" id="c1">
+    <div class="card-title"><span class="card-n">1</span>登入公司 Google 帳號</div>
+    <div class="alert alert-info">🔐 請用<strong>公司 Google 帳號</strong>登入，在家遠端也能使用。</div>
+    <button class="btn btn-primary" onclick="handleAuth()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      登入 Google 帳號
+    </button>
+  </div>
+
+  <!-- Step 2: Upload PPT -->
+  <div class="card" id="c2" style="display:none">
+    <div class="card-title"><span class="card-n">2</span>上傳設計申請 PPT</div>
+    <div class="drop-zone" id="dz-ppt"
+      onclick="document.getElementById('fi-ppt').click()"
+      ondragover="event.preventDefault();this.classList.add('over')"
+      ondragleave="this.classList.remove('over')"
+      ondrop="onPptDrop(event)">
+      <span class="dz-icon">📋</span>
+      <p>拖曳或<strong>點擊這裡</strong>上傳 PPT / PPTX</p>
+      <small>業務填的設計申請簡報</small>
+    </div>
+    <input type="file" id="fi-ppt" accept=".ppt,.pptx" style="display:none" onchange="onPptFile(event)">
+    <div id="ppt-pill" style="display:none" class="file-pill">
+      <span style="font-size:22px">✅</span>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:13px" id="ppt-name"></div>
+        <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace" id="ppt-meta"></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="resetAll()">重新開始</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Brand detection -->
+  <div class="card" id="c3" style="display:none">
+    <div class="card-title"><span class="card-n">3</span>辨識品牌</div>
+    <div id="brand-detecting" style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text2)">
+      <span class="spinner"></span> 從簡報內容辨識品牌中...
+    </div>
+    <div id="brand-found" style="display:none">
+      <div class="brand-result" id="brand-result-box">
+        <div class="brand-big" id="brand-emoji">🏷️</div>
+        <div>
+          <div class="brand-detected" id="brand-name-display"></div>
+          <div class="brand-path" id="brand-path-display"></div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-ghost btn-sm" onclick="showBrandPicker()">換品牌</button>
+          <button class="btn btn-primary btn-sm" onclick="confirmBrand()">確認 →</button>
+        </div>
+      </div>
+
+      <!-- Brand picker (hidden by default) -->
+      <div id="brand-picker" style="display:none;margin-top:14px">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:10px">選擇正確的品牌：</p>
+        <div id="brand-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;max-height:300px;overflow-y:auto;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 4: Confirm products -->
+  <div class="card" id="c4" style="display:none">
+    <div class="card-title"><span class="card-n">4</span>確認商品清單</div>
+    <div id="parse-msg" style="font-size:13px;color:var(--text2);margin-bottom:6px"></div>
+    <div class="prog-bar"><div class="prog-fill" id="pp"></div></div>
+    <div class="log" id="parse-log"></div>
+    <div id="products-panel" style="display:none;margin-top:16px">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:8px">從簡報解析出以下商品，請確認（不對的點 ✕ 刪除）：</p>
+      <div class="ptags" id="ptags"></div>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border2)">
+        <p style="font-size:12px;color:var(--text3);margin-bottom:8px">有漏掉的？手動加入：</p>
+        <div class="inline-input">
+          <input type="text" id="manual-in" placeholder="輸入商品名稱，Enter 送出" onkeydown="if(event.key==='Enter')addProduct()">
+          <button class="btn btn-sec btn-sm" onclick="addProduct()">+ 加入</button>
+        </div>
+      </div>
+      <div style="margin-top:18px">
+        <button class="btn btn-primary" onclick="startSearch()">✓ 確認，開始搜尋商品圖</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 5: Results -->
+  <div class="card" id="c5" style="display:none">
+    <div class="card-title"><span class="card-n">5</span>搜尋結果</div>
+    <div id="search-msg" style="font-size:13px;color:var(--text2);margin-bottom:6px"></div>
+    <div class="prog-bar"><div class="prog-fill" id="sp"></div></div>
+    <div class="log" id="search-log" style="margin-bottom:18px"></div>
+    <div id="img-results"></div>
+  </div>
+</main>
+
+<!-- Bottom bar -->
+<div id="bot-bar">
+  <div class="bot-info">已選取 <strong id="sel-n">0</strong> 張
+    <span id="sel-prods" style="color:var(--text3);margin-left:6px;font-size:12px"></span>
+  </div>
+  <div class="bot-actions">
+    <button class="btn btn-ghost" onclick="selectAll()">全選</button>
+    <button class="btn btn-ghost" onclick="clearAll()">清除</button>
+    <button class="btn btn-primary" onclick="doDownload()">⬇️ 打包下載 ZIP</button>
+  </div>
+</div>
+
+<!-- Download modal -->
+<div id="dl-modal">
+  <div class="dl-box">
+    <div class="dl-icon" id="dl-icon">📦</div>
+    <div class="dl-title" id="dl-title">正在打包...</div>
+    <div class="dl-sub" id="dl-sub">請稍候</div>
+    <div class="prog-bar" style="margin:0"><div class="prog-fill" id="dlp"></div></div>
+    <div class="dl-detail" id="dl-detail"></div>
+  </div>
+</div>
+
+<script>
+// ── Config ──────────────────────────────────
+const CLIENT_ID = '560002030559-ovt2qssfvtnmqlr2ub8tphv7vjt1jq16.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
+const DESIGN_DEPT_ID = '0AB6D1XVUOY_lUk9PVA'; // 01_1.影音設計部
+
+const BRAND_EMOJIS = ['🐾','🌿','✨','🏠','🍃','💎','🌸','🦋','🌊','⭐','🎯','🔥','🌈','🎀','🍀'];
+
+// ── State ────────────────────────────────────
+let gToken = null;
+let allBrands = [];
+let selectedBrand = null;
+let parsedProducts = [];
+let pptText = '';
+let foundImages = {};
+let selected = new Map();
+
+// ── Helpers ──────────────────────────────────
+const $ = id => document.getElementById(id);
+function setStep(n) {
+  for (let i = 1; i <= 5; i++) {
+    const el = $(`s${i}`); if (!el) continue;
+    el.classList.remove('active','done');
+    if (i < n) el.classList.add('done');
+    else if (i === n) el.classList.add('active');
+  }
+}
+function addLog(id, msg) {
+  const el = $(id); if (!el) return;
+  el.innerHTML += msg + '<br>'; el.scrollTop = el.scrollHeight;
+}
+function setProg(id, v) { const el = $(id); if (el) el.style.width = Math.min(v,100)+'%'; }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Auth ─────────────────────────────────────
+function handleAuth() {
+  if (gToken) {
+    gToken = null;
+    $('auth-btn').classList.remove('connected');
+    $('auth-label').textContent = '登入 Google 帳號';
+    resetAll(); return;
+  }
+  if (!window.google) { setTimeout(handleAuth, 600); return; }
+  google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID, scope: SCOPES,
+    callback: async (resp) => {
+      if (resp.error) { alert('登入失敗：' + resp.error); return; }
+      gToken = resp.access_token;
+      $('auth-btn').classList.add('connected');
+      $('auth-label').textContent = '✓ 已登入';
+      // Show step 2
+      $('c1').innerHTML = `<div style="display:flex;align-items:center;gap:10px;color:var(--green);font-size:13px;font-weight:500">✅ 已登入 Google 帳號，請上傳 PPT</div>`;
+      $('c2').style.display = 'block';
+      setStep(2);
+      // Pre-load brands in background
+      loadBrands();
+    }
+  }).requestAccessToken();
+}
+
+// ── Load brands (background) ──────────────────
+async function loadBrands() {
+  try {
+    const items = await driveList(DESIGN_DEPT_ID);
+    allBrands = items.filter(f => f.mimeType === 'application/vnd.google-apps.folder')
+      .sort((a,b) => a.name.localeCompare(b.name,'zh-TW'));
+  } catch(e) {
+    console.warn('Brand preload failed:', e);
+  }
+}
+
+// ── PPT Upload ────────────────────────────────
+function onPptDrop(e) {
+  e.preventDefault(); $('dz-ppt').classList.remove('over');
+  const f = e.dataTransfer.files[0]; if (f) loadPpt(f);
+}
+function onPptFile(e) { loadPpt(e.target.files[0]); }
+
+function loadPpt(f) {
+  if (!f.name.match(/\.pptx?$/i)) { alert('請上傳 PPT 或 PPTX 檔案'); return; }
+  $('dz-ppt').style.display = 'none';
+  $('ppt-pill').style.display = 'flex';
+  $('ppt-name').textContent = f.name;
+  $('ppt-meta').textContent = (f.size/1024/1024).toFixed(2) + ' MB';
+  $('c3').style.display = 'block';
+  setStep(3);
+  parsePptAndDetectBrand(f);
+}
+
+function resetAll() {
+  $('dz-ppt').style.display = 'block';
+  $('ppt-pill').style.display = 'none';
+  $('fi-ppt').value = '';
+  ['c3','c4','c5'].forEach(id => { const el=$(id); if(el) el.style.display='none'; });
+  $('bot-bar').classList.remove('on');
+  parsedProducts = []; foundImages = {}; selected.clear(); selectedBrand = null;
+  setStep(2);
+}
+
+// ── Parse PPT + Detect Brand ──────────────────
+async function parsePptAndDetectBrand(f) {
+  $('brand-detecting').style.display = 'flex';
+  $('brand-found').style.display = 'none';
+
+  try {
+    const zip = await JSZip.loadAsync(f);
+    let text = '';
+    const slides = Object.keys(zip.files).filter(n => /ppt\/slides\/slide\d+\.xml/.test(n));
+    for (const s of slides) {
+      const xml = await zip.file(s).async('text');
+      text += xml.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ') + '\n';
+    }
+    pptText = text;
+
+    // Wait for brands if still loading
+    let attempts = 0;
+    while (allBrands.length === 0 && attempts < 10) {
+      await sleep(500); attempts++;
+    }
+
+    // Detect brand from PPT text
+    const detected = detectBrand(text, allBrands);
+    selectedBrand = detected || (allBrands.length > 0 ? allBrands[0] : null);
+
+    showDetectedBrand(selectedBrand, !!detected);
+
+  } catch(e) {
+    $('brand-detecting').innerHTML = `<span style="color:var(--red)">❌ 讀取失敗：${e.message}</span>`;
+  }
+}
+
+function detectBrand(text, brands) {
+  const tl = text.toLowerCase();
+  // Try to match brand name in PPT text
+  for (const brand of brands) {
+    const name = brand.name.replace(/^\d+[_.]?\s*/,'').toLowerCase(); // strip leading numbers
+    if (name.length > 2 && tl.includes(name)) return brand;
+  }
+  return null;
+}
+
+function showDetectedBrand(brand, autoDetected) {
+  $('brand-detecting').style.display = 'none';
+  $('brand-found').style.display = 'block';
+
+  if (!brand) {
+    $('brand-result-box').style.display = 'none';
+    showBrandPicker();
+    return;
+  }
+
+  const idx = allBrands.findIndex(b => b.id === brand.id);
+  $('brand-emoji').textContent = BRAND_EMOJIS[idx % BRAND_EMOJIS.length];
+  $('brand-name-display').textContent = brand.name;
+  $('brand-path-display').textContent = `01_1.影音設計部 → ${brand.name} → 商品頁 → 示意圖`;
+  $('brand-result-box').style.display = 'flex';
+
+  if (!autoDetected) {
+    $('brand-result-box').style.background = 'var(--surface2)';
+    $('brand-result-box').style.borderColor = 'var(--border)';
+  }
+}
+
+function showBrandPicker() {
+  const picker = $('brand-picker');
+  picker.style.display = 'block';
+  const list = $('brand-list');
+  list.innerHTML = allBrands.map((b, i) => `
+    <div onclick="pickBrand('${b.id}','${b.name.replace(/'/g,"\\'")}')"
+      style="border:1px solid var(--border2);border-radius:var(--r);padding:10px 14px;cursor:pointer;background:var(--surface);display:flex;align-items:center;gap:8px;transition:all .15s;"
+      onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--accent-bg)'"
+      onmouseout="this.style.borderColor='var(--border2)';this.style.background='var(--surface)'">
+      <span style="font-size:18px">${BRAND_EMOJIS[i%BRAND_EMOJIS.length]}</span>
+      <span style="font-size:13px;font-weight:500">${b.name}</span>
+    </div>
+  `).join('');
+}
+
+function pickBrand(id, name) {
+  selectedBrand = { id, name };
+  const idx = allBrands.findIndex(b => b.id === id);
+  $('brand-emoji').textContent = BRAND_EMOJIS[idx % BRAND_EMOJIS.length];
+  $('brand-name-display').textContent = name;
+  $('brand-path-display').textContent = `01_1.影音設計部 → ${name} → 商品頁 → 示意圖`;
+  $('brand-result-box').style.display = 'flex';
+  $('brand-result-box').style.background = 'var(--accent-bg)';
+  $('brand-result-box').style.borderColor = 'var(--accent-border)';
+  $('brand-picker').style.display = 'none';
+}
+
+function confirmBrand() {
+  if (!selectedBrand) { alert('請選擇品牌'); return; }
+  $('c4').style.display = 'block';
+  setStep(4);
+  $('c4').scrollIntoView({ behavior:'smooth' });
+  parseProducts();
+}
+
+// ── Parse Products ────────────────────────────
+function parseProducts() {
+  $('parse-msg').textContent = '🔍 解析商品中...';
+  setProg('pp', 0);
+  addLog('parse-log', '📄 從 PPT 文字中比對商品...');
+
+  parsedProducts = extractProducts(pptText);
+  setProg('pp', 100);
+
+  if (parsedProducts.length) {
+    addLog('parse-log', `✅ 找到 ${parsedProducts.length} 個商品`);
+    $('parse-msg').textContent = '✅ 解析完成，請確認下方清單是否正確';
+  } else {
+    addLog('parse-log', '⚠️ 未自動找到商品，請手動輸入');
+    $('parse-msg').textContent = '請手動輸入商品名稱';
+  }
+  renderTags();
+  $('products-panel').style.display = 'block';
+}
+
+function extractProducts(text) {
+  const found = new Set();
+  const pats = [/產品圖[：:]\s*([^\n。！？]{2,80})/g, /商品圖[：:]\s*([^\n。！？]{2,80})/g];
+  for (const pat of pats) {
+    let m;
+    while ((m = pat.exec(text)) !== null) {
+      m[1].split(/[、，,（()）【】]+/).map(s=>s.trim())
+        .filter(s=>s.length>=2&&s.length<=20).forEach(s=>found.add(s));
+    }
+  }
+  ['飼料','魚油','肉泥','關節','腸胃','益生菌','凍乾','零食','潔牙','洗毛','耳朵','眼睛','葉黃素','蔓越莓'].forEach(kw=>{
+    if (text.includes(kw)) found.add(kw);
+  });
+  return [...found].map(name=>({name}));
+}
+
+function renderTags() {
+  $('ptags').innerHTML = parsedProducts.map((p,i)=>`
+    <div class="ptag">${p.name}
+      <button class="ptag-del" onclick="removeProduct(${i})">✕</button>
+    </div>`).join('');
+}
+function removeProduct(i) { parsedProducts.splice(i,1); renderTags(); }
+function addProduct() {
+  const inp=$('manual-in'); const v=inp.value.trim(); if(!v) return;
+  v.split(/[,，、]/).map(s=>s.trim()).filter(s=>s&&!parsedProducts.find(p=>p.name===s))
+    .forEach(name=>parsedProducts.push({name}));
+  inp.value=''; renderTags();
+}
+
+// ── Search ────────────────────────────────────
+async function startSearch() {
+  if (!parsedProducts.length) { alert('請先加入商品'); return; }
+  $('c5').style.display = 'block'; setStep(5);
+  $('img-results').innerHTML = ''; foundImages = {}; selected.clear();
+  $('c5').scrollIntoView({ behavior:'smooth' });
+
+  addLog('search-log', `🏷️ 品牌：${selectedBrand.name}`);
+  addLog('search-log', `📁 搜尋「商品頁」資料夾...`);
+
+  // Find 商品頁 inside brand folder
+  const brandItems = await driveList(selectedBrand.id);
+  const shopFolder = brandItems.find(f =>
+    f.mimeType==='application/vnd.google-apps.folder' && f.name.includes('商品頁')
+  );
+
+  if (!shopFolder) {
+    addLog('search-log', `❌ 找不到「商品頁」資料夾`);
+    $('search-msg').textContent = '❌ 找不到「商品頁」資料夾，請確認 Drive 結構';
+    return;
+  }
+  addLog('search-log', `✓ 找到「${shopFolder.name}」`);
+
+  // List product folders
+  const prodItems = await driveList(shopFolder.id);
+  const prodFolders = prodItems.filter(f => f.mimeType==='application/vnd.google-apps.folder');
+  addLog('search-log', `📦 共 ${prodFolders.length} 個產品資料夾`);
+
+  for (let i=0; i<parsedProducts.length; i++) {
+    const p = parsedProducts[i];
+    setProg('sp', (i/parsedProducts.length)*100);
+    $('search-msg').textContent = `搜尋「${p.name}」... (${i+1}/${parsedProducts.length})`;
+    addLog('search-log', `🔍 「${p.name}」...`);
+
+    const matched = prodFolders.filter(f => fuzzyMatch(p.name, f.name));
+    let images = [];
+
+    for (const folder of matched) {
+      const subs = await driveList(folder.id);
+      const simiFolder = subs.find(f =>
+        f.mimeType==='application/vnd.google-apps.folder' && f.name.includes('示意圖')
+      );
+      const target = simiFolder || { id: folder.id };
+      const imgs = await driveList(target.id);
+      const imgFiles = imgs.filter(f =>
+        (f.mimeType&&f.mimeType.startsWith('image/')) || /\.(png|jpg|jpeg|webp|gif)$/i.test(f.name)
+      );
+      images.push(...imgFiles.map(f=>({...f,angle:guessAngle(f.name)})));
+    }
+
+    images = images.filter((f,i,a)=>a.findIndex(x=>x.id===f.id)===i);
+    foundImages[p.name] = images;
+    addLog('search-log', `   ✓ ${images.length} 張`);
+    renderSection(p.name, images);
+    await sleep(50);
+  }
+
+  setProg('sp', 100);
+  const total = Object.values(foundImages).flat().length;
+  $('search-msg').textContent = `✅ 完成！共 ${total} 張，請選取後下載`;
+  $('bot-bar').classList.add('on');
+}
+
+const SYNONYMS = {
+  '魚油':['魚油','fish oil','omega'],'腸胃':['腸胃','益生菌','消化','乳酸菌'],
+  '關節':['關節','軟骨','骨骼','joint'],'飼料':['飼料','狗糧','貓糧','乾糧'],
+  '肉泥':['肉泥','肉醬','慕斯'],'凍乾':['凍乾'],'葉黃素':['葉黃素','lutein'],
+  '蔓越莓':['蔓越莓','cranberry'],
+};
+function fuzzyMatch(keyword, folderName) {
+  const kl=keyword.toLowerCase(); const fl=folderName.toLowerCase();
+  if (fl.includes(kl)||kl.includes(fl.replace(/^\d+[._]?\s*/,''))) return true;
+  for (const [k,syns] of Object.entries(SYNONYMS)) {
+    if ((kl.includes(k)||k.includes(kl))&&syns.some(s=>fl.includes(s.toLowerCase()))) return true;
+  }
+  return false;
+}
+function guessAngle(n) {
+  if(n.includes('正面'))return'正面';if(n.includes('俯視')||n.includes('俯角'))return'俯視';
+  if(n.includes('仰角'))return'仰角';if(n.includes('左旋'))return'左旋轉';
+  if(n.includes('右旋'))return'右旋轉';if(n.includes('半側')||n.includes('側面'))return'側面';
+  if(n.includes('背面'))return'背面';if(n.includes('外袋')||n.includes('包裝'))return'外包裝';
+  return'示意圖';
+}
+
+// ── Render ────────────────────────────────────
+function renderSection(product, images) {
+  const container=$('img-results');
+  const sec=document.createElement('div'); sec.className='prod-section';
+  if (!images.length) {
+    sec.innerHTML=`
+      <div class="prod-hd">
+        <div class="prod-title"><span class="prod-dot" style="background:var(--red)"></span>${product}</div>
+        <span style="font-size:12px;color:var(--red)">未找到圖片</span>
+      </div>
+      <div class="alert alert-warn">在「${selectedBrand.name}」的商品頁中找不到「${product}」的示意圖。請確認 Drive 裡有對應資料夾。</div>`;
+    container.appendChild(sec); return;
+  }
+  const gid='g-'+product.replace(/[\s\/]/g,'-');
+  sec.innerHTML=`
+    <div class="prod-hd">
+      <div class="prod-title"><span class="prod-dot" style="background:var(--green)"></span>${product}</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace">${images.length} 張</span>
+        <button class="sel-sec" onclick="selSection('${product}')">全選此商品</button>
+      </div>
+    </div>
+    <div class="img-grid" id="${gid}"></div>`;
+  container.appendChild(sec);
+  const grid=$(gid);
+  images.forEach(img=>{
+    const card=document.createElement('div');
+    card.className='img-card'; card.dataset.product=product; card.dataset.id=img.id;
+    card.innerHTML=`
+      <img class="img-thumb"
+        src="https://drive.google.com/thumbnail?id=${img.id}&sz=w200&access_token=${gToken}"
+        alt="${img.name}" onerror="this.style.opacity='.2';this.style.padding='30px'">
+      <div class="img-body">
+        <div class="img-name" title="${img.name}">${img.name}</div>
+        <div class="img-angle">${img.angle}</div>
+      </div>
+      <div class="img-check">✓</div>`;
+    card.addEventListener('click',()=>toggle(card,img,product));
+    grid.appendChild(card);
+  });
+}
+
+// ── Selection ─────────────────────────────────
+function toggle(card,img,product) {
+  if(selected.has(img.id)){selected.delete(img.id);card.classList.remove('sel');}
+  else{selected.set(img.id,{...img,product});card.classList.add('sel');}
+  updateCount();
+}
+function selectAll() {
+  document.querySelectorAll('.img-card').forEach(card=>{
+    const p=card.dataset.product; const id=card.dataset.id;
+    const img=(foundImages[p]||[]).find(i=>i.id===id);
+    if(img){selected.set(id,{...img,product:p});card.classList.add('sel');}
+  });updateCount();
+}
+function clearAll() {
+  selected.clear();
+  document.querySelectorAll('.img-card').forEach(c=>c.classList.remove('sel'));
+  updateCount();
+}
+function selSection(product) {
+  (foundImages[product]||[]).forEach(img=>selected.set(img.id,{...img,product}));
+  document.querySelectorAll(`.img-card[data-product="${product}"]`).forEach(c=>c.classList.add('sel'));
+  updateCount();
+}
+function updateCount() {
+  $('sel-n').textContent=selected.size;
+  const prods=new Set([...document.querySelectorAll('.img-card.sel')].map(c=>c.dataset.product));
+  $('sel-prods').textContent=selected.size>0?`（${[...prods].join('、')}）`:'';
+}
+
+// ── Download ──────────────────────────────────
+async function doDownload() {
+  if(!selected.size){alert('請先選取圖片');return;}
+  $('dl-modal').classList.add('on');
+  setDl('📦',`打包 ${selected.size} 張圖片...`,'請稍候');
+  const zip=new JSZip(); let done=0;
+  for(const [id,img] of selected) {
+    try {
+      $('dl-detail').textContent=img.name;
+      const resp=await fetch(
+        `https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true`,
+        {headers:{Authorization:`Bearer ${gToken}`}}
+      );
+      zip.folder(img.product).file(img.name,await resp.blob());
+      done++; setProg('dlp',(done/selected.size)*100);
+    } catch(e){console.error(e);}
+  }
+  setDl('⚙️','壓縮中...','即將完成');
+  const blob=await zip.generateAsync({type:'blob'},m=>setProg('dlp',m.percent));
+  const date=new Date().toLocaleDateString('zh-TW').replace(/\//g,'-');
+  const brand=(selectedBrand?.name||'品牌').replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g,'');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`${brand}_商品圖_${date}.zip`;
+  a.click();
+  setDl('✅','下載完成！',`${done} 張已打包`);
+  setTimeout(()=>$('dl-modal').classList.remove('on'),2800);
+}
+function setDl(icon,title,sub){$('dl-icon').textContent=icon;$('dl-title').textContent=title;$('dl-sub').textContent=sub;}
+
+// ── Drive API ─────────────────────────────────
+async function driveList(folderId) {
+  const q=encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+  const url=`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&pageSize=200&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+  const r=await fetch(url,{headers:{Authorization:`Bearer ${gToken}`}});
+  const d=await r.json();
+  return d.files||[];
+}
+</script>
+</body>
+</html>
 
